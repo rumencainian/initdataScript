@@ -7,6 +7,7 @@ import com.sun.org.slf4j.internal.LoggerFactory;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -30,7 +31,6 @@ import java.util.*;
 
 public class Init {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Init.class);
 
     private static Connection conn = null;
     private static Statement stmt = null;
@@ -42,6 +42,7 @@ public class Init {
 
     private static Integer MAX_VALUE = 10000;
 
+
     public static void main(String[] args) {
 
         Properties properties = new Properties();
@@ -51,6 +52,8 @@ public class Init {
             // 读取配置项
             String table = properties.getProperty("table");
             initConnect(properties);
+            System.out.println(conn);
+            System.out.println(client);
             if ("user_account".equals(table)) {
                 userAccount();
             }
@@ -63,15 +66,35 @@ public class Init {
 
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException throwables) {
+                    throwables.printStackTrace();
+                }
+            }
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException throwables) {
+                    throwables.printStackTrace();
+                }
+            }
+
+            System.exit(0);
         }
 
     }
 
     public static void initConnect(Properties properties) {
-        LOGGER.debug("start init connect");
+
         String url = properties.getProperty("url");
         String username = properties.getProperty("userName");
         String password = properties.getProperty("passWorld");
+        Properties pr = new Properties();
+        pr.setProperty("user", username);
+        pr.setProperty("password", password);
 
         String esUrl = properties.getProperty("esUrl");
         String esUserName = properties.getProperty("esUserName");
@@ -79,28 +102,20 @@ public class Init {
 
         try {
             // 加载数据库驱动程序
-            Class.forName("com.mysql.jdbc.Driver");
+            Class<?> clazz = Class.forName("com.mysql.cj.jdbc.Driver");
             // 建立数据库连接
-            conn = DriverManager.getConnection(url, username, password);
-            // 创建Statement对象
-            stmt = conn.createStatement();
+            Driver driver = (Driver) clazz.newInstance();
+            conn = driver.connect(url, pr);
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         } catch (SQLException e) {
             e.printStackTrace();
-        } finally {
-            // 关闭数据库连接
-            try {
-                if (stmt != null) {
-                    stmt.close();
-                }
-                if (conn != null) {
-                    conn.close();
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
         }
+
         List<HttpHost> hostList = new ArrayList<>();
         Arrays.stream(esUrl.split(","))
                 .forEach(item -> hostList.add(new HttpHost(item.split(":")[0],
@@ -118,62 +133,75 @@ public class Init {
             return httpClientBuilder;
         });
         client = new RestHighLevelClient(builder);
-        LOGGER.debug("connect is init finished");
+
     }
 
 
     public static void userAccount() {
+        // 创建Statement对象
         String countSql = "SELECT count(*) FROM user_account";
         String sql = "SELECT id,wallet_no FROM user_account WHERE wallet_no!=\"\"";
-        AtomicReference<ResultSet> rs = null;
+        ResultSet rscount = null;
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("indexName");
+            GetIndexRequest indexRequest = new GetIndexRequest("userid");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("indexName");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("userid");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
-            LOGGER.debug("start read database ");
-            rs.set(stmt.executeQuery(countSql));
-            while (rs.get().next()) {
-                int count = rs.get().getInt("count");
+            stmt = conn.createStatement();
+
+            rscount = stmt.executeQuery(countSql);
+            while (rscount.next()) {
+                int count = rscount.getInt("count");
+
                 int start = 0;
-                while (count / MAX_VALUE != 0) {
+                int times = count / MAX_VALUE;
+                for (int i = 0; i <= times; i++) {
+                    start = MAX_VALUE * i;
+                    int finalStart = start;
                     EXECUTOR.execute(() -> {
-                        String s = sql + "  'LIMIT' " + start + "," + MAX_VALUE;
+                        String s = sql + "  LIMIT " + finalStart + "," + MAX_VALUE;
+                        ResultSet rs = null;
                         try {
-                            rs.set(stmt.executeQuery(s));
+                            rs = stmt.executeQuery(s);
                             BulkRequest bulkRequest = new BulkRequest();
-                            while (rs.get().next()) {
-                                String id = rs.get().getString("id");
-                                String walletNo = rs.get().getString("wallet_no");
+                            while (rs.next()) {
+                                String id = rs.getString("id");
+                                String walletNo = rs.getString("wallet_no");
                                 WalletNoAndUserIdEntity entity = new WalletNoAndUserIdEntity();
                                 entity.setUserId(id);
                                 entity.setWalletNo(walletNo);
-                                IndexRequest request = buildIndexRequest(entity, "", id);
+                                IndexRequest request = buildIndexRequest(entity, "userid", id);
                                 bulkRequest.add(request);
                             }
                             client.bulk(bulkRequest, RequestOptions.DEFAULT);
                         } catch (SQLException throwables) {
-                            LOGGER.error(" error   ");
+
                         } catch (IOException e) {
+                        } finally {
+                            if (rs != null) {
+                                try {
+                                    rs.close();
+                                } catch (SQLException throwables) {
+                                    throwables.printStackTrace();
+                                }
+                            }
                         }
-
                     });
-
-
                 }
+
             }
-            LOGGER.debug("database is read over");
+
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         } catch (IOException e) {
 
         } finally {
-            if (rs.get() != null) {
+            if (rscount != null) {
                 try {
-                    rs.get().close();
+                    rscount.close();
                 } catch (SQLException throwables) {
                     throwables.printStackTrace();
                 }
@@ -185,59 +213,50 @@ public class Init {
     public static void walletAccountRecord() {
         String countSql = "SELECT count(*) FROM wallet_account_record";
         String sql = "SELECT id,wallet_no FROM wallet_account_record";
-        AtomicReference<ResultSet> rs = null;
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("indexName");
+            GetIndexRequest indexRequest = new GetIndexRequest("invoice");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("indexName");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
-            LOGGER.debug("start read database ");
-            rs.set(stmt.executeQuery(countSql));
-            while (rs.get().next()) {
-                int count = rs.get().getInt("count");
+            stmt = conn.createStatement();
+            ResultSet rscount = stmt.executeQuery(countSql);
+            while (rscount.next()) {
+                int count = rscount.getInt("count");
                 int start = 0;
-                while (count / MAX_VALUE != 0) {
+                int times = count / MAX_VALUE;
+                for (int i = 0; i <= times; i++) {
+                    start = MAX_VALUE * i;
+                    int finalStart = start;
                     EXECUTOR.execute(() -> {
-                        String s = sql + "  'LIMIT' " + start + "," + MAX_VALUE;
+                        String s = sql + "  LIMIT " + finalStart + "," + MAX_VALUE;
                         try {
-                            rs.set(stmt.executeQuery(s));
+                            ResultSet rs = stmt.executeQuery(s);
                             BulkRequest bulkRequest = new BulkRequest();
-                            while (rs.get().next()) {
-                                String id = rs.get().getString("id");
-                                String walletNo = rs.get().getString("wallet_no");
+                            while (rs.next()) {
+                                String id = rs.getString("id");
+                                String walletNo = rs.getString("wallet_no");
                                 WalletNoAndUserIdEntity entity = new WalletNoAndUserIdEntity();
                                 entity.setUserId(id);
                                 entity.setWalletNo(walletNo);
-                                IndexRequest request = buildIndexRequest(entity, "", id);
+                                IndexRequest request = buildIndexRequest(entity, "invoice", id);
                                 bulkRequest.add(request);
                             }
                             client.bulk(bulkRequest, RequestOptions.DEFAULT);
                         } catch (SQLException throwables) {
-                            LOGGER.error(" error   ");
                         } catch (IOException e) {
                         }
-
                     });
-
-
                 }
+
             }
-            LOGGER.debug("database is read over");
+
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         } catch (IOException e) {
 
-        } finally {
-            if (rs.get() != null) {
-                try {
-                    rs.get().close();
-                } catch (SQLException throwables) {
-                    throwables.printStackTrace();
-                }
-            }
         }
 
     }
@@ -245,61 +264,50 @@ public class Init {
     public static void payRecord() {
         String countSql = "SELECT count(*) FROM pay_record";
         String sql = "SELECT id,wallet_no FROM pay_record";
-        AtomicReference<ResultSet> rs = null;
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("indexName");
+            GetIndexRequest indexRequest = new GetIndexRequest("invoice");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("indexName");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
-            LOGGER.debug("start read database ");
-            rs.set(stmt.executeQuery(countSql));
-            while (rs.get().next()) {
-                int count = rs.get().getInt("count");
+            stmt = conn.createStatement();
+            ResultSet rscount = stmt.executeQuery(countSql);
+            while (rscount.next()) {
+                int count = rscount.getInt("count");
                 int start = 0;
-                while (count / MAX_VALUE != 0) {
+                int times = count / MAX_VALUE;
+                for (int i = 0; i <= times; i++) {
+                    start = MAX_VALUE * i;
+                    int finalStart = start;
                     EXECUTOR.execute(() -> {
-                        String s = sql + "  'LIMIT' " + start + "," + MAX_VALUE;
+                        String s = sql + "  LIMIT " + finalStart + "," + MAX_VALUE;
                         try {
-                            rs.set(stmt.executeQuery(s));
+                            ResultSet rs = stmt.executeQuery(s);
                             BulkRequest bulkRequest = new BulkRequest();
-                            while (rs.get().next()) {
-                                String id = rs.get().getString("id");
-                                String walletNo = rs.get().getString("wallet_no");
+                            while (rs.next()) {
+                                String id = rs.getString("id");
+                                String walletNo = rs.getString("wallet_no");
                                 WalletNoAndUserIdEntity entity = new WalletNoAndUserIdEntity();
                                 entity.setUserId(id);
                                 entity.setWalletNo(walletNo);
-                                IndexRequest request = buildIndexRequest(entity, "", id);
+                                IndexRequest request = buildIndexRequest(entity, "invoice", id);
                                 bulkRequest.add(request);
                             }
                             client.bulk(bulkRequest, RequestOptions.DEFAULT);
                         } catch (SQLException throwables) {
-                            LOGGER.error(" error   ");
                         } catch (IOException e) {
                         }
-
                     });
-
-
                 }
+
             }
-            LOGGER.debug("database is read over");
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         } catch (IOException e) {
 
-        } finally {
-            if (rs.get() != null) {
-                try {
-                    rs.get().close();
-                } catch (SQLException throwables) {
-                    throwables.printStackTrace();
-                }
-            }
         }
-
 
     }
 

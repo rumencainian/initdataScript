@@ -214,15 +214,16 @@ public class Init {
     }
 
     public static void walletAccountRecord() {
-        String countSql = "  SELECT COUNT(*) as 'count' FROM wallet_account_record t1  WHERE \n" +
-                "   pay_no NOT IN ( SELECT pay_no FROM wallet_account_record WHERE operate_type=4 and refund_status IN(0,1,2)) AND\n" +
-                " t1.pay_status=2 AND operate_type=1 AND operate_des=\"首次充值\"";
+        String countSql = "SELECT COUNT(*) FROM" +
+                "( SELECT t1.* FROM wallet_account_record t1  GROUP BY t1.pay_no HAVING SUM(CASE WHEN (operate_type=4 AND refund_status IN(0,1,2) ) THEN 1 ELSE 0 END )=0) t2   " +
+                "WHERE  t2.pay_status=2 AND t2.operate_type=1 AND t2.operate_des=\"首次充值\" ";
 
-        String sql = "SELECT t2.id,t1.amount,t1.booked_time,t1.pay_no FROM wallet_account_record t1  \n" +
-                "\tJOIN user_account t2 ON t1.wallet_no=t2.wallet_no\n" +
-                "\t WHERE \n" +
-                "   pay_no NOT IN ( SELECT pay_no FROM wallet_account_record WHERE operate_type=4 and refund_status IN(0,1,2)) AND\n" +
-                " t1.pay_status=2 AND operate_type=1 AND operate_des=\"首次充值\" ";
+        String sql = "SELECT t3.amount,t3.booked_time,t3.pay_no,t4.id FROM " +
+                "( SELECT t2.amount,t2.booked_time,t2.pay_no,t2.wallet_no FROM" +
+                "( SELECT t1.* FROM wallet_account_record t1  GROUP BY t1.pay_no HAVING SUM(CASE WHEN (operate_type=4 AND refund_status IN(0,1,2) ) THEN 1 ELSE 0 END )=0) t2 " +
+                " \n" +
+                " WHERE  t2.pay_status=2 AND t2.operate_type=1 AND t2.operate_des=\"首次充值\")" +
+                " t3 JOIN user_account t4 ON t4.wallet_no=t3.wallet_no ";
         // 执行SQL语句
         try {
             GetIndexRequest indexRequest = new GetIndexRequest("invoice");

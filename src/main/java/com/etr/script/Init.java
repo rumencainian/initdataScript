@@ -140,10 +140,10 @@ public class Init {
         ResultSet rscount = null;
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("userid");
+            GetIndexRequest indexRequest = new GetIndexRequest("wallet_user_id");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("userid");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("wallet_user_id");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
             stmt = conn.createStatement();
@@ -173,7 +173,7 @@ public class Init {
                                 WalletNoAndUserIdEntity entity = new WalletNoAndUserIdEntity();
                                 entity.setUserId(id);
                                 entity.setWalletNo(walletNo);
-                                IndexRequest request = buildIndexRequest(entity, "userid", id);
+                                IndexRequest request = buildIndexRequest(entity, "wallet_user_id", id);
                                 bulkRequest.add(request);
                             }
 

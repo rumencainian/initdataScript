@@ -229,10 +229,10 @@ public class Init {
                 " JOIN user_account t4 ON t4.wallet_no=t3.wallet_no ";
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("invoice_test");
+            GetIndexRequest indexRequest = new GetIndexRequest("invoice");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice_test");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
             stmt = conn.createStatement();
@@ -268,7 +268,7 @@ public class Init {
                                 entity.setCostCount(Long.valueOf(amount));
                                 entity.setForm("wallet_account_record");
                                 entity.setStatus(0);
-                                IndexRequest request = buildIndexRequest(entity, "invoice_test", payNo);
+                                IndexRequest request = buildIndexRequest(entity, "invoice", payNo);
                                 bulkRequest.add(request);
                             }
                         }
@@ -298,10 +298,10 @@ public class Init {
         String sql = "SELECT user_id,trade_no,fee_amount,pay_time FROM pay_record WHERE pay_biz=4 AND `status`=2";
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("invoice_test");
+            GetIndexRequest indexRequest = new GetIndexRequest("invoice");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice_test");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
             stmt = conn.createStatement();
@@ -337,7 +337,7 @@ public class Init {
                             entity.setCostCount(Long.valueOf(feeAmount));
                             entity.setForm("pay_record");
                             entity.setStatus(0);
-                            IndexRequest request = buildIndexRequest(entity, "invoice_test", tradeNo);
+                            IndexRequest request = buildIndexRequest(entity, "invoice", tradeNo);
                             bulkRequest.add(request);
                         }
                         client.bulk(bulkRequest, RequestOptions.DEFAULT);

@@ -214,7 +214,7 @@ public class Init {
     }
 
     public static void walletAccountRecord() {
-        String countSql = "SELECT COUNT(*) FROM" +
+        String countSql = "SELECT COUNT(*) AS 'COUNT' FROM" +
                 "( SELECT t1.* FROM wallet_account_record t1  GROUP BY t1.pay_no HAVING SUM(CASE WHEN (operate_type=4 AND refund_status IN(0,1,2) ) THEN 1 ELSE 0 END )=0) t2   " +
                 "WHERE  t2.pay_status=2 AND t2.operate_type=1 AND t2.operate_des=\"首次充值\" ";
 
@@ -222,8 +222,8 @@ public class Init {
                 "( SELECT t2.amount,t2.booked_time,t2.pay_no,t2.wallet_no FROM" +
                 "( SELECT t1.* FROM wallet_account_record t1  GROUP BY t1.pay_no HAVING SUM(CASE WHEN (operate_type=4 AND refund_status IN(0,1,2) ) THEN 1 ELSE 0 END )=0) t2 " +
                 " \n" +
-                " WHERE  t2.pay_status=2 AND t2.operate_type=1 AND t2.operate_des=\"首次充值\")" +
-                " t3 JOIN user_account t4 ON t4.wallet_no=t3.wallet_no ";
+                " WHERE  t2.pay_status=2 AND t2.operate_type=1 AND t2.operate_des=\"首次充值\") t3 " +
+                " JOIN user_account t4 ON t4.wallet_no=t3.wallet_no ";
         // 执行SQL语句
         try {
             GetIndexRequest indexRequest = new GetIndexRequest("invoice");

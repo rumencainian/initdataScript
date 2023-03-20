@@ -4,10 +4,11 @@ import com.alibaba.fastjson2.JSON;
 import com.etr.script.entity.InvoiceCostEntity;
 import com.etr.script.entity.WalletNoAndUserIdEntity;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
 
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -46,6 +47,8 @@ public class Init {
             new LinkedBlockingDeque<>(100), new ThreadPoolExecutor.CallerRunsPolicy());
 
     private static final Integer MAX_VALUE = 10000;
+
+    private static final SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
 
     public static void main(String[] args) {
@@ -226,10 +229,10 @@ public class Init {
                 " JOIN user_account t4 ON t4.wallet_no=t3.wallet_no ";
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("invoice");
+            GetIndexRequest indexRequest = new GetIndexRequest("invoice_test");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice_test");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
             stmt = conn.createStatement();
@@ -254,17 +257,18 @@ public class Init {
                             String amount = rs.getString("amount");
                             String bookedTime = rs.getString("booked_time");
                             String payNo = rs.getString("pay_no");
+                            Long time = (bookedTime != null && !"".equals(bookedTime)) ? simpleDateFormat.parse(bookedTime).getTime() : 0L;
                             if (payNo != null && !"".equals(payNo)) {
                                 InvoiceCostEntity entity = new InvoiceCostEntity();
                                 entity.setUserId(userId);
                                 entity.setTradeNo(payNo);
-                                entity.setPayTime(bookedTime);
+                                entity.setPayTime(time);
                                 entity.setCostType(1);
                                 entity.setVersion("1");
                                 entity.setCostCount(Long.valueOf(amount));
                                 entity.setForm("wallet_account_record");
                                 entity.setStatus(0);
-                                IndexRequest request = buildIndexRequest(entity, "invoice", payNo);
+                                IndexRequest request = buildIndexRequest(entity, "invoice_test", payNo);
                                 bulkRequest.add(request);
                             }
                         }
@@ -273,6 +277,8 @@ public class Init {
                         logger.error("error", throwables);
                     } catch (IOException e) {
                         logger.error("error", e);
+                    } catch (ParseException e) {
+                        e.printStackTrace();
                     }
 //                    });
                 }
@@ -282,7 +288,7 @@ public class Init {
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         } catch (IOException e) {
-
+            e.printStackTrace();
         }
 
     }
@@ -292,10 +298,10 @@ public class Init {
         String sql = "SELECT user_id,trade_no,fee_amount,pay_time FROM pay_record WHERE pay_biz=4 AND `status`=2";
         // 执行SQL语句
         try {
-            GetIndexRequest indexRequest = new GetIndexRequest("invoice");
+            GetIndexRequest indexRequest = new GetIndexRequest("invoice_test");
             boolean exists = client.indices().exists(indexRequest, RequestOptions.DEFAULT);
             if (!exists) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice");
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest("invoice_test");
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
             stmt = conn.createStatement();
@@ -315,21 +321,23 @@ public class Init {
                         Statement statement = conn.createStatement();
                         rs = statement.executeQuery(s);
                         BulkRequest bulkRequest = new BulkRequest();
+
                         while (rs.next()) {
                             String userId = rs.getString("user_id");
                             String tradeNo = rs.getString("trade_no");
                             String feeAmount = rs.getString("fee_amount");
                             String payTime = rs.getString("pay_time");
+                            Long time = (payTime != null && !"".equals(payTime)) ? simpleDateFormat.parse(payTime).getTime() : 0L;
                             InvoiceCostEntity entity = new InvoiceCostEntity();
                             entity.setUserId(userId);
                             entity.setTradeNo(tradeNo);
-                            entity.setPayTime(payTime);
+                            entity.setPayTime(time);
                             entity.setCostType(1);
                             entity.setVersion("1");
                             entity.setCostCount(Long.valueOf(feeAmount));
                             entity.setForm("pay_record");
                             entity.setStatus(0);
-                            IndexRequest request = buildIndexRequest(entity, "invoice", tradeNo);
+                            IndexRequest request = buildIndexRequest(entity, "invoice_test", tradeNo);
                             bulkRequest.add(request);
                         }
                         client.bulk(bulkRequest, RequestOptions.DEFAULT);
@@ -337,6 +345,8 @@ public class Init {
                         logger.error("error", throwables);
                     } catch (IOException e) {
                         logger.error("error", e);
+                    } catch (ParseException e) {
+                        e.printStackTrace();
                     }
 //                    });
                 }

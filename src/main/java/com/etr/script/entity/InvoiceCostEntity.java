@@ -35,7 +35,7 @@ public class InvoiceCostEntity {
     /**
      * 支付时间
      */
-    private String payTime;
+    private Long payTime;
 
 
     /**
